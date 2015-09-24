@@ -27,14 +27,16 @@ class SessionManager(object):
         self.settings = {}       # session configurations
         self._expires = self._default_session_lifetime
         self._is_dirty = True
+        self._cookie_get_func = None
+        self._cookie_set_func = None
         self.__init_session_driver()
         self.__init_session_object() # initialize session object
 
     def __init_session_object(self):
-        session_id = self.handler.get_cookie(self.SESSION_ID)
+        session_id = self._cookie_get_func(self.SESSION_ID)
         if not session_id:
             session_id = uuid4().hex
-            self.handler.set_cookie(self.SESSION_ID,
+            self._cookie_set_func(self.SESSION_ID,
                                     session_id,
                                     **self.__session_settings())
             self._is_dirty = True
@@ -105,30 +107,40 @@ class SessionManager(object):
                 driver = 'memory',
                 driver_settings = {'host':self,}, # use application to save session data.
                 force_persistence = True,
-        	cache_driver = True, # cache driver in application. 
-        	cookie_config = {'expires_days':10, 'expires':datetime.datetime.utcnow(),}, # tornado cookies configuration
+                cache_driver = True, # cache driver in application. 
+                cookie_config = {'expires_days':10, 'expires':datetime.datetime.utcnow(),}, # tornado cookies configuration
+                use_secure_cookies = True
             },
         )
-        driver:			default enum value: memory, file, redis, memcache. 
-        driver_settings:	the data driver need. settings may be the host, database, password, and so on.
-				redis settings as follow:
-				      driver_settings = {
-				      		      host = '127.0.0.1',
-						      port = '6379',
-						      db = 0, # where the session data to save.
-						      password = 'session_db_password', # if database has password
-				 	}
-        force_persistence:	default is False.
-				In default, session's data exists in memory only, you must persistence it by manual.
-				Generally, rewrite Tornado RequestHandler's prepare(self) and on_finish(self) to persist session data is recommended. 
-        		     	when this value set to True, session data will be force to persist everytime when it has any change.
-				
+        driver:         default enum value: memory, file, redis, memcache. 
+        driver_settings:    the data driver need. settings may be the host, database, password, and so on.
+                redis settings as follow:
+                      driver_settings = {
+                                  host = '127.0.0.1',
+                              port = '6379',
+                              db = 0, # where the session data to save.
+                              password = 'session_db_password', # if database has password
+                    }
+        force_persistence:  default is False.
+                In default, session's data exists in memory only, you must persistence it by manual.
+                Generally, rewrite Tornado RequestHandler's prepare(self) and on_finish(self) to persist session data is recommended. 
+                        when this value set to True, session data will be force to persist everytime when it has any change.
+                
         """
         session_settings = self.handler.settings.get("session")
         if not session_settings: # use default
             session_settings = {}
-            session_settings.update(driver='memory', driver_settings={'host':self.handler.application}, force_persistence=True, cache_driver=True)
+            session_settings.update(driver='memory', driver_settings={'host':self.handler.application}, force_persistence=True, cache_driver=True, use_secure_cookies=True)
         driver = session_settings.get("driver")
+        if session_settings.get('use_secure_cookies') is True:
+            cookie_secret = self.handler.application.settings.get('cookie_secret')
+            if not cookie_secret:
+                raise ValueError('Cannot use secure sessions without setting cookie_secret!')
+            self._cookie_get_func = self.handler.get_secure_cookie
+            self._cookie_set_func = self.handler.set_secure_cookie
+        else:
+            self._cookie_get_func = self.handler.get_cookie
+            self._cookie_set_func = self.handler.set_cookie
         if not driver:
             raise SessionConfigurationError('driver is missed')
         self.settings = session_settings
@@ -221,9 +233,9 @@ class SessionManager(object):
     #     Generate unique session id by uuid4
     #     """
     #     session_id = uuid4().hex
-    #     self.handler.set_cookie(self.SESSION_ID,
-    #                             session_id,
-    #                             **self.__session_settings())
+    #     self.handler._cookie_set_func(self.SESSION_ID,
+    #                                   session_id,
+    #                                   **self.__session_settings())
     #     return session_id
 
     def __session_settings(self):
@@ -233,7 +245,7 @@ class SessionManager(object):
         return session_settings
 
     # def __retrieve_current_session_id(self):
-    #     session_id = self.handler.get_cookie(self.SESSION_ID)
+    #     session_id = self.handler._cookie_get_func(self.SESSION_ID)
     #     if session_id:return session_id
     #     return self.__generate_session_id()
 
