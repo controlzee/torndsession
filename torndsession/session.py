@@ -233,7 +233,7 @@ class SessionManager(object):
     #     Generate unique session id by uuid4
     #     """
     #     session_id = uuid4().hex
-    #     self.handler._cookie_set_func(self.SESSION_ID,
+    #     self._cookie_set_func(self.SESSION_ID,
     #                                   session_id,
     #                                   **self.__session_settings())
     #     return session_id
@@ -245,7 +245,7 @@ class SessionManager(object):
         return session_settings
 
     # def __retrieve_current_session_id(self):
-    #     session_id = self.handler._cookie_get_func(self.SESSION_ID)
+    #     session_id = self._cookie_get_func(self.SESSION_ID)
     #     if session_id:return session_id
     #     return self.__generate_session_id()
 
